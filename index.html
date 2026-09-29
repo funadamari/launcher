@@ -10,6 +10,7 @@
 
 <title>画像ビューアを開いています</title>
 
+
 <style>
 
 html,
@@ -26,6 +27,7 @@ body {
 
     font-family: sans-serif;
 }
+
 
 #message {
 
@@ -44,6 +46,7 @@ body {
 
     line-height: 1.7;
 }
+
 
 #openButton {
 
@@ -64,6 +67,7 @@ body {
     font-size: 16px;
 
     cursor: pointer;
+
 }
 
 </style>
@@ -73,10 +77,11 @@ body {
 
 <body>
 
+
 <div id="message">
 
     <div id="messageText">
-        画像ビューアを開いています…
+        画像ビューアを確認しています…
     </div>
 
     <button id="openButton">
@@ -88,61 +93,44 @@ body {
 
 <script>
 
+
 /* =========================================================
    設定
 ========================================================= */
 
 
-/*
-   viewerのURL
-*/
-
 const VIEWER_URL =
     "https://funadamari.github.io/viewer/";
 
 
-/*
-   viewerとの情報交換用localStorage
-*/
-
 const VIEWER_STORAGE_KEY =
     "funadamariViewerRequest";
 
-
-/*
-   現在アクティブなviewerの情報
-*/
 
 const ACTIVE_VIEWER_KEY =
     "funadamariActiveViewer";
 
 
 /*
-   viewerを再利用するための名前
-
-   重要：
-   常に同じ名前を使用する。
+   viewerがactiveとして登録されてから
+   どの程度の時間なら有効とみなすか
 */
+const ACTIVE_VIEWER_VALID_TIME =
+    60 * 1000;
 
+
+/*
+   viewerを開く際に使用するwindow名
+*/
 const WINDOW_NAME =
     "funadamariViewer";
 
 
-/*
-   viewerが開くまで待つ時間
-
-   新規viewerの場合に、
-   viewer側が自分のIDを登録するまで
-   少し待つために使用する。
-*/
-
-const VIEWER_START_WAIT =
-    500;
-
 
 /* =========================================================
-   URL parameters
+   URLパラメータ
 ========================================================= */
+
 
 const params =
     new URLSearchParams(
@@ -150,28 +138,19 @@ const params =
     );
 
 
-/*
-   image
-
-   URLSearchParamsのdecodeにより、
-   %3A、%2Fなどは自動的に元に戻る。
-*/
-
 const imageURL =
     params.get("image") || "";
 
-
-/*
-   title
-*/
 
 const titleText =
     params.get("title") || "";
 
 
+
 /* =========================================================
-   HTML elements
+   HTML要素
 ========================================================= */
+
 
 const messageText =
     document.getElementById(
@@ -185,9 +164,11 @@ const openButton =
     );
 
 
+
 /* =========================================================
-   Viewer URL作成
+   viewer URL作成
 ========================================================= */
+
 
 function makeViewerURL() {
 
@@ -224,9 +205,11 @@ function makeViewerURL() {
 }
 
 
+
 /* =========================================================
-   現在のactive viewer情報を取得
+   active viewer情報取得
 ========================================================= */
+
 
 function getActiveViewerInfo() {
 
@@ -257,6 +240,28 @@ function getActiveViewerInfo() {
         }
 
 
+        /*
+           timestampが存在する場合は、
+           古い情報を無効とする
+        */
+
+        if (info.timestamp) {
+
+            const age =
+                Date.now() -
+                Number(info.timestamp);
+
+
+            if (age >
+                ACTIVE_VIEWER_VALID_TIME) {
+
+                return null;
+
+            }
+
+        }
+
+
         return info;
 
     }
@@ -274,9 +279,11 @@ function getActiveViewerInfo() {
 }
 
 
+
 /* =========================================================
-   Viewer requestを保存
+   viewer request保存
 ========================================================= */
+
 
 function saveViewerRequest(
     targetViewerId
@@ -294,7 +301,7 @@ function saveViewerRequest(
             Date.now(),
 
         targetViewerId:
-            targetViewerId || ""
+            targetViewerId
 
     };
 
@@ -323,26 +330,11 @@ function saveViewerRequest(
 }
 
 
-/* =========================================================
-   エラー表示
-========================================================= */
-
-function showOpenButton(
-    message
-) {
-
-    messageText.innerHTML =
-        message;
-
-    openButton.style.display =
-        "inline-block";
-
-}
-
 
 /* =========================================================
    launcherを閉じる
 ========================================================= */
+
 
 function closeLauncher() {
 
@@ -367,52 +359,81 @@ function closeLauncher() {
 }
 
 
+
 /* =========================================================
-   viewerを開く／再利用する
+   エラー／ボタン表示
 ========================================================= */
 
-function openViewer() {
 
-    /* -----------------------------------------------------
-       画像URL確認
-    ----------------------------------------------------- */
+function showOpenButton(
+    message
+) {
 
-    if (!imageURL) {
+    messageText.innerHTML =
+        message;
 
-        messageText.innerHTML =
-            "画像URLが指定されていません。";
 
-        openButton.style.display =
-            "none";
+    openButton.style.display =
+        "inline-block";
 
-        return;
+}
+
+
+
+/* =========================================================
+   既存viewerへ画像変更要求
+========================================================= */
+
+
+function sendToExistingViewer(
+    viewerInfo
+) {
+
+    if (!viewerInfo ||
+        !viewerInfo.id) {
+
+        return false;
 
     }
 
 
-    /* -----------------------------------------------------
-       現在のactive viewerを取得
-    ----------------------------------------------------- */
-
-    const activeInfo =
-        getActiveViewerInfo();
+    const success =
+        saveViewerRequest(
+            viewerInfo.id
+        );
 
 
-    const activeViewerId =
-        activeInfo
-            ? activeInfo.id
-            : "";
+    if (!success) {
+
+        return false;
+
+    }
+
+
+    messageText.innerHTML =
+        "既存のビューアに画像を表示しています…";
 
 
     /*
-       まずviewerを名前で取得する。
-
-       既存viewerがあれば、
-       そのviewerが返される。
-
-       存在しなければ、
-       新しいウィンドウ／タブが作られる。
+       viewer側がstorageイベントを
+       受け取って画像を変更する
     */
+
+    closeLauncher();
+
+
+    return true;
+
+}
+
+
+
+/* =========================================================
+   新しいviewerを開く
+========================================================= */
+
+
+function openNewViewer() {
 
     let viewerWindow = null;
 
@@ -420,18 +441,15 @@ function openViewer() {
     try {
 
         /*
-           既存viewerを再利用する場合は
-           about:blank等へ移動させないため、
-           空文字を指定する。
+           ここでは必ずURLを指定する。
 
-           既存viewerがない場合は
-           新しい空のviewerウィンドウを
-           作る。
+           "" を指定すると、
+           about:blankだけのタブを作ってしまう。
         */
 
         viewerWindow =
             window.open(
-                "",
+                makeViewerURL(),
                 WINDOW_NAME
             );
 
@@ -446,10 +464,6 @@ function openViewer() {
     }
 
 
-    /* -----------------------------------------------------
-       window.open失敗
-    ----------------------------------------------------- */
-
     if (!viewerWindow) {
 
         showOpenButton(
@@ -457,97 +471,10 @@ function openViewer() {
             "下のボタンを押してください。"
         );
 
-        return;
+        return false;
 
     }
 
-
-    /* -----------------------------------------------------
-       active viewerが存在する場合
-    ----------------------------------------------------- */
-
-    if (activeViewerId) {
-
-        /*
-           既存viewerに対して、
-           今回の画像を送る。
-
-           viewer自身は移動させない。
-        */
-
-        saveViewerRequest(
-            activeViewerId
-        );
-
-
-        /*
-           viewerにフォーカス
-        */
-
-        try {
-
-            viewerWindow.focus();
-
-        }
-        catch (error) {
-
-            // ignore
-
-        }
-
-
-        /*
-           launcherを閉じる
-        */
-
-        closeLauncher();
-
-        return;
-
-    }
-
-
-    /* -----------------------------------------------------
-       active viewerが存在しない場合
-       → 新しいviewer
-    ----------------------------------------------------- */
-
-    try {
-
-        /*
-           新規viewerの場合は、
-           先ほどwindow.open()で作った
-           空のウィンドウをviewerにする。
-
-           location.hrefを変更することで、
-           このウィンドウ自身がviewerになる。
-        */
-
-        viewerWindow.location.href =
-            makeViewerURL();
-
-    }
-    catch (error) {
-
-        console.error(
-            "viewer navigation error:",
-            error
-        );
-
-
-        showOpenButton(
-            "ビューアを開けませんでした。<br>" +
-            "下のボタンを押してください。"
-        );
-
-        return;
-
-    }
-
-
-    /*
-       viewerにフォーカス
-    */
 
     try {
 
@@ -562,21 +489,97 @@ function openViewer() {
 
 
     /*
-       launcherを閉じる
+       viewerの読み込みを待つため、
+       launcherを閉じる。
     */
 
     closeLauncher();
 
+
+    return true;
+
 }
+
+
+
+/* =========================================================
+   viewerを開く／既存viewerを利用する
+========================================================= */
+
+
+function openViewer() {
+
+    if (!imageURL) {
+
+        messageText.innerHTML =
+            "画像URLが指定されていません。";
+
+        openButton.style.display =
+            "none";
+
+        return;
+
+    }
+
+
+    /*
+       まず既存viewerを確認する。
+
+       ここが今回の重要な変更点。
+       既存viewerがある場合は
+       window.open()を呼ばない。
+    */
+
+    const activeViewerInfo =
+        getActiveViewerInfo();
+
+
+    if (activeViewerInfo) {
+
+        /*
+           既存viewerがある
+        */
+
+        const success =
+            sendToExistingViewer(
+                activeViewerInfo
+            );
+
+
+        if (success) {
+
+            return;
+
+        }
+
+    }
+
+
+    /*
+       既存viewerがない場合だけ
+       新しいviewerを開く。
+    */
+
+    openNewViewer();
+
+}
+
 
 
 /* =========================================================
    「ビューアを開く」ボタン
 ========================================================= */
 
+
 openButton.addEventListener(
     "click",
     function () {
+
+        /*
+           ボタンのクリックは
+           ユーザー操作なので、
+           popup blockerに許可されやすい。
+        */
 
         openViewer();
 
@@ -584,9 +587,11 @@ openButton.addEventListener(
 );
 
 
+
 /* =========================================================
    初期処理
 ========================================================= */
+
 
 if (!imageURL) {
 
@@ -596,19 +601,10 @@ if (!imageURL) {
 }
 else {
 
-    /*
-       自動的にviewerを開く。
-
-       ブラウザが許可すれば
-       そのまま処理される。
-
-       ポップアップとして拒否された場合だけ
-       ボタンを表示する。
-    */
-
     openViewer();
 
 }
+
 
 </script>
 
