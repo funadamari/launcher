@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
+
 <meta charset="UTF-8">
 
 <meta name="viewport"
-      content="width=device-width,
-               initial-scale=1.0">
+      content="width=device-width, initial-scale=1.0">
 
 <title>画像ビューアを開いています</title>
 
@@ -13,6 +14,7 @@
 
 html,
 body {
+
     margin: 0;
     padding: 0;
 
@@ -45,7 +47,7 @@ body {
 
 #openButton {
 
-    display: inline-block;
+    display: none;
 
     margin-top: 20px;
 
@@ -65,6 +67,7 @@ body {
 }
 
 </style>
+
 </head>
 
 
@@ -72,7 +75,7 @@ body {
 
 <div id="message">
 
-    <div>
+    <div id="messageText">
         画像ビューアを開いています…
     </div>
 
@@ -89,31 +92,11 @@ body {
    設定
 ========================================================= */
 
-
-/*
-   現在使用しているviewer
-*/
-
 const VIEWER_URL =
     "https://funadamari.github.io/viewer/";
 
-
-/*
-   viewerを識別するための
-   localStorageキー
-*/
-
 const STORAGE_KEY =
     "funadamariViewerRequest";
-
-
-/*
-   ブラウザのウィンドウ名
-
-   重要：
-   毎回同じ名前を使用することで、
-   同じviewerタブを再利用する。
-*/
 
 const WINDOW_NAME =
     "funadamariViewer";
@@ -128,24 +111,32 @@ const params =
         window.location.search
     );
 
-
 const imageURL =
     params.get("image");
-
 
 const titleText =
     params.get("title") || "";
 
 
 /* =========================================================
-   Viewer URLを作成
+   要素
+========================================================= */
+
+const messageText =
+    document.getElementById("messageText");
+
+const openButton =
+    document.getElementById("openButton");
+
+
+/* =========================================================
+   Viewer URL作成
 ========================================================= */
 
 function makeViewerURL() {
 
     const viewerParams =
         new URLSearchParams();
-
 
     if (imageURL) {
 
@@ -156,7 +147,6 @@ function makeViewerURL() {
 
     }
 
-
     if (titleText) {
 
         viewerParams.set(
@@ -165,7 +155,6 @@ function makeViewerURL() {
         );
 
     }
-
 
     return (
         VIEWER_URL +
@@ -177,24 +166,20 @@ function makeViewerURL() {
 
 
 /* =========================================================
-   viewerへのリクエストを保存
+   Viewerへのリクエストを保存
 ========================================================= */
 
 function saveViewerRequest() {
 
     const request = {
 
-        image:
-            imageURL || "",
+        image: imageURL || "",
 
-        title:
-            titleText || "",
+        title: titleText || "",
 
-        timestamp:
-            Date.now()
+        timestamp: Date.now()
 
     };
-
 
     try {
 
@@ -220,61 +205,69 @@ function saveViewerRequest() {
 
 
 /* =========================================================
-   viewerを開く
+   Viewerを開く
 ========================================================= */
 
 function openViewer() {
 
+    /* -----------------------------------------
+       画像URL確認
+    ----------------------------------------- */
+
     if (!imageURL) {
 
-        document.getElementById(
-            "message"
-        ).innerHTML =
+        messageText.innerHTML =
             "画像URLが指定されていません。";
+
+        openButton.style.display = "none";
 
         return;
 
     }
 
 
-    /*
-       まず画像情報を保存する。
-    */
+    /* -----------------------------------------
+       viewerへの情報を保存
+    ----------------------------------------- */
 
     saveViewerRequest();
 
 
-    /*
-       viewerを開く。
+    /* -----------------------------------------
+       viewerを開く
+    ----------------------------------------- */
 
-       WINDOW_NAMEが同じなら、
-       既存のviewerウィンドウ／タブを
-       再利用する。
-    */
+    let viewerWindow = null;
 
-    const viewerWindow =
-        window.open(
-            makeViewerURL(),
-            WINDOW_NAME
+    try {
+
+        viewerWindow =
+            window.open(
+                makeViewerURL(),
+                WINDOW_NAME
+            );
+
+    } catch (error) {
+
+        console.error(
+            "window.open error:",
+            error
         );
 
+    }
 
-    /*
-       ポップアップブロック等で
-       window.open()が失敗した場合。
-    */
+
+    /* -----------------------------------------
+       開けなかった場合
+    ----------------------------------------- */
 
     if (!viewerWindow) {
 
-        document.getElementById(
-            "message"
-        ).innerHTML =
-            "ビューアを開けませんでした。<br>" +
+        messageText.innerHTML =
+            "ビューアを自動的に開けませんでした。<br>" +
             "下のボタンを押してください。";
 
-        document.getElementById(
-            "openButton"
-        ).style.display =
+        openButton.style.display =
             "inline-block";
 
         return;
@@ -282,26 +275,24 @@ function openViewer() {
     }
 
 
-    /*
-       viewerへ移動
-    */
+    /* -----------------------------------------
+       viewerにフォーカス
+    ----------------------------------------- */
 
     try {
 
         viewerWindow.focus();
 
     } catch (error) {
+
         // ignore
+
     }
 
 
-    /*
-       launcher自身を閉じる。
-
-       Google Sitesから外部リンクとして
-       開かれたタブであれば、多くのブラウザで
-       閉じることができます。
-    */
+    /* -----------------------------------------
+       launcherを閉じる
+    ----------------------------------------- */
 
     setTimeout(
         function () {
@@ -311,7 +302,9 @@ function openViewer() {
                 window.close();
 
             } catch (error) {
+
                 // ignore
+
             }
 
         },
@@ -325,45 +318,39 @@ function openViewer() {
    ボタン
 ========================================================= */
 
-document
-    .getElementById("openButton")
-    .addEventListener(
-        "click",
-        function () {
+openButton.addEventListener(
+    "click",
+    function () {
 
-            openViewer();
+        openViewer();
 
-        }
-    );
+    }
+);
 
 
 /* =========================================================
    初期処理
 ========================================================= */
 
-document.getElementById(
-    "openButton"
-).style.display = "none";
+if (!imageURL) {
 
+    messageText.innerHTML =
+        "画像URLが指定されていません。";
 
-/*
-   少し待ってからviewerを開く。
+} else {
 
-   Google Sitesからの遷移直後に
-   window.open()が拒否されるケースを
-  多少減らすため。
-*/
+    /*
+       重要：
+       setTimeoutからwindow.open()を呼ばず、
+       ページ読み込み時に直接実行する。
+    */
 
-setTimeout(
-    function () {
+    openViewer();
 
-        openViewer();
-
-    },
-    50
-);
+}
 
 </script>
 
 </body>
+
 </html>
