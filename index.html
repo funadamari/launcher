@@ -92,11 +92,39 @@ body {
    設定
 ========================================================= */
 
+
+/*
+   viewerのURL
+*/
+
 const VIEWER_URL =
     "https://funadamari.github.io/viewer/";
 
+
+/*
+   viewerとの情報交換に使用する
+   localStorageキー
+*/
+
 const STORAGE_KEY =
     "funadamariViewerRequest";
+
+
+/*
+   現在使用中のviewerを示すキー
+*/
+
+const ACTIVE_VIEWER_KEY =
+    "funadamariActiveViewer";
+
+
+/*
+   viewerを再利用するための
+   ウィンドウ名
+
+   重要：
+   毎回同じ名前を使用する。
+*/
 
 const WINDOW_NAME =
     "funadamariViewer";
@@ -111,22 +139,29 @@ const params =
         window.location.search
     );
 
+
 const imageURL =
     params.get("image");
+
 
 const titleText =
     params.get("title") || "";
 
 
 /* =========================================================
-   要素
+   HTML elements
 ========================================================= */
 
 const messageText =
-    document.getElementById("messageText");
+    document.getElementById(
+        "messageText"
+    );
+
 
 const openButton =
-    document.getElementById("openButton");
+    document.getElementById(
+        "openButton"
+    );
 
 
 /* =========================================================
@@ -138,6 +173,7 @@ function makeViewerURL() {
     const viewerParams =
         new URLSearchParams();
 
+
     if (imageURL) {
 
         viewerParams.set(
@@ -147,6 +183,7 @@ function makeViewerURL() {
 
     }
 
+
     if (titleText) {
 
         viewerParams.set(
@@ -155,6 +192,7 @@ function makeViewerURL() {
         );
 
     }
+
 
     return (
         VIEWER_URL +
@@ -166,20 +204,24 @@ function makeViewerURL() {
 
 
 /* =========================================================
-   Viewerへのリクエストを保存
+   viewerへのリクエストを保存
 ========================================================= */
 
 function saveViewerRequest() {
 
     const request = {
 
-        image: imageURL || "",
+        image:
+            imageURL || "",
 
-        title: titleText || "",
+        title:
+            titleText || "",
 
-        timestamp: Date.now()
+        timestamp:
+            Date.now()
 
     };
+
 
     try {
 
@@ -190,7 +232,8 @@ function saveViewerRequest() {
 
         return true;
 
-    } catch (error) {
+    }
+    catch (error) {
 
         console.error(
             "localStorage error:",
@@ -210,34 +253,46 @@ function saveViewerRequest() {
 
 function openViewer() {
 
-    /* -----------------------------------------
-       画像URL確認
-    ----------------------------------------- */
+    /*
+       画像URLがない場合
+    */
 
     if (!imageURL) {
 
         messageText.innerHTML =
             "画像URLが指定されていません。";
 
-        openButton.style.display = "none";
+        openButton.style.display =
+            "none";
 
         return;
 
     }
 
 
-    /* -----------------------------------------
-       viewerへの情報を保存
-    ----------------------------------------- */
+    /*
+       まずviewerへのリクエストを保存
+    */
 
     saveViewerRequest();
 
 
-    /* -----------------------------------------
-       viewerを開く
-    ----------------------------------------- */
+    /*
+       viewerを開く。
+
+       同じWINDOW_NAMEを指定することで、
+
+       ・viewerが存在しない
+           → 新しいviewerを開く
+
+       ・viewerが存在する
+           → 既存viewerを再利用
+
+       という動作を期待する。
+    */
 
     let viewerWindow = null;
+
 
     try {
 
@@ -247,7 +302,8 @@ function openViewer() {
                 WINDOW_NAME
             );
 
-    } catch (error) {
+    }
+    catch (error) {
 
         console.error(
             "window.open error:",
@@ -257,9 +313,9 @@ function openViewer() {
     }
 
 
-    /* -----------------------------------------
-       開けなかった場合
-    ----------------------------------------- */
+    /* =====================================================
+       window.openがブロックされた場合
+    ===================================================== */
 
     if (!viewerWindow) {
 
@@ -275,24 +331,53 @@ function openViewer() {
     }
 
 
-    /* -----------------------------------------
+    /* =====================================================
+       viewerをアクティブviewerとして登録する
+    ===================================================== */
+
+    /*
+       実際のviewer側でも登録するが、
+       launcher側でも「現在このviewerを
+       使用する」という情報を記録する。
+    */
+
+    try {
+
+        localStorage.setItem(
+            ACTIVE_VIEWER_KEY,
+            Date.now().toString()
+        );
+
+    }
+    catch (error) {
+
+        console.error(
+            "active viewer storage error:",
+            error
+        );
+
+    }
+
+
+    /* =====================================================
        viewerにフォーカス
-    ----------------------------------------- */
+    ===================================================== */
 
     try {
 
         viewerWindow.focus();
 
-    } catch (error) {
+    }
+    catch (error) {
 
         // ignore
 
     }
 
 
-    /* -----------------------------------------
+    /* =====================================================
        launcherを閉じる
-    ----------------------------------------- */
+    ===================================================== */
 
     setTimeout(
         function () {
@@ -301,7 +386,8 @@ function openViewer() {
 
                 window.close();
 
-            } catch (error) {
+            }
+            catch (error) {
 
                 // ignore
 
@@ -315,7 +401,7 @@ function openViewer() {
 
 
 /* =========================================================
-   ボタン
+   「ビューアを開く」ボタン
 ========================================================= */
 
 openButton.addEventListener(
@@ -337,12 +423,17 @@ if (!imageURL) {
     messageText.innerHTML =
         "画像URLが指定されていません。";
 
-} else {
+}
+else {
 
     /*
-       重要：
-       setTimeoutからwindow.open()を呼ばず、
-       ページ読み込み時に直接実行する。
+       自動的にviewerを開いてみる。
+
+       ブラウザがポップアップを許可すれば
+       そのままviewerが開く。
+
+       ブロックされた場合は、
+       「ビューアを開く」ボタンを表示する。
     */
 
     openViewer();
