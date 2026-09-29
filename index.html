@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+
+<meta name="viewport"
+      content="width=device-width,
+               initial-scale=1.0">
+
+<title>画像ビューアを開いています</title>
+
+<style>
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+
+    width: 100%;
+    height: 100%;
+
+    background: #000;
+    color: #fff;
+
+    font-family: sans-serif;
+}
+
+#message {
+
+    position: absolute;
+
+    left: 50%;
+    top: 50%;
+
+    transform: translate(-50%, -50%);
+
+    width: 90%;
+
+    max-width: 500px;
+
+    text-align: center;
+
+    line-height: 1.7;
+}
+
+#openButton {
+
+    display: inline-block;
+
+    margin-top: 20px;
+
+    padding: 12px 24px;
+
+    border: none;
+
+    border-radius: 6px;
+
+    background: #fff;
+
+    color: #111;
+
+    font-size: 16px;
+
+    cursor: pointer;
+}
+
+</style>
+</head>
+
+
+<body>
+
+<div id="message">
+
+    <div>
+        画像ビューアを開いています…
+    </div>
+
+    <button id="openButton">
+        ビューアを開く
+    </button>
+
+</div>
+
+
+<script>
+
+/* =========================================================
+   設定
+========================================================= */
+
+
+/*
+   現在使用しているviewer
+*/
+
+const VIEWER_URL =
+    "https://funadamari.github.io/viewer/";
+
+
+/*
+   viewerを識別するための
+   localStorageキー
+*/
+
+const STORAGE_KEY =
+    "funadamariViewerRequest";
+
+
+/*
+   ブラウザのウィンドウ名
+
+   重要：
+   毎回同じ名前を使用することで、
+   同じviewerタブを再利用する。
+*/
+
+const WINDOW_NAME =
+    "funadamariViewer";
+
+
+/* =========================================================
+   URL parameters
+========================================================= */
+
+const params =
+    new URLSearchParams(
+        window.location.search
+    );
+
+
+const imageURL =
+    params.get("image");
+
+
+const titleText =
+    params.get("title") || "";
+
+
+/* =========================================================
+   Viewer URLを作成
+========================================================= */
+
+function makeViewerURL() {
+
+    const viewerParams =
+        new URLSearchParams();
+
+
+    if (imageURL) {
+
+        viewerParams.set(
+            "image",
+            imageURL
+        );
+
+    }
+
+
+    if (titleText) {
+
+        viewerParams.set(
+            "title",
+            titleText
+        );
+
+    }
+
+
+    return (
+        VIEWER_URL +
+        "?" +
+        viewerParams.toString()
+    );
+
+}
+
+
+/* =========================================================
+   viewerへのリクエストを保存
+========================================================= */
+
+function saveViewerRequest() {
+
+    const request = {
+
+        image:
+            imageURL || "",
+
+        title:
+            titleText || "",
+
+        timestamp:
+            Date.now()
+
+    };
+
+
+    try {
+
+        localStorage.setItem(
+            STORAGE_KEY,
+            JSON.stringify(request)
+        );
+
+        return true;
+
+    } catch (error) {
+
+        console.error(
+            "localStorage error:",
+            error
+        );
+
+        return false;
+
+    }
+
+}
+
+
+/* =========================================================
+   viewerを開く
+========================================================= */
+
+function openViewer() {
+
+    if (!imageURL) {
+
+        document.getElementById(
+            "message"
+        ).innerHTML =
+            "画像URLが指定されていません。";
+
+        return;
+
+    }
+
+
+    /*
+       まず画像情報を保存する。
+    */
+
+    saveViewerRequest();
+
+
+    /*
+       viewerを開く。
+
+       WINDOW_NAMEが同じなら、
+       既存のviewerウィンドウ／タブを
+       再利用する。
+    */
+
+    const viewerWindow =
+        window.open(
+            makeViewerURL(),
+            WINDOW_NAME
+        );
+
+
+    /*
+       ポップアップブロック等で
+       window.open()が失敗した場合。
+    */
+
+    if (!viewerWindow) {
+
+        document.getElementById(
+            "message"
+        ).innerHTML =
+            "ビューアを開けませんでした。<br>" +
+            "下のボタンを押してください。";
+
+        document.getElementById(
+            "openButton"
+        ).style.display =
+            "inline-block";
+
+        return;
+
+    }
+
+
+    /*
+       viewerへ移動
+    */
+
+    try {
+
+        viewerWindow.focus();
+
+    } catch (error) {
+        // ignore
+    }
+
+
+    /*
+       launcher自身を閉じる。
+
+       Google Sitesから外部リンクとして
+       開かれたタブであれば、多くのブラウザで
+       閉じることができます。
+    */
+
+    setTimeout(
+        function () {
+
+            try {
+
+                window.close();
+
+            } catch (error) {
+                // ignore
+            }
+
+        },
+        100
+    );
+
+}
+
+
+/* =========================================================
+   ボタン
+========================================================= */
+
+document
+    .getElementById("openButton")
+    .addEventListener(
+        "click",
+        function () {
+
+            openViewer();
+
+        }
+    );
+
+
+/* =========================================================
+   初期処理
+========================================================= */
+
+document.getElementById(
+    "openButton"
+).style.display = "none";
+
+
+/*
+   少し待ってからviewerを開く。
+
+   Google Sitesからの遷移直後に
+   window.open()が拒否されるケースを
+  多少減らすため。
+*/
+
+setTimeout(
+    function () {
+
+        openViewer();
+
+    },
+    50
+);
+
+</script>
+
+</body>
+</html>
