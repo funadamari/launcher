@@ -350,12 +350,24 @@ function openNewViewer() {
 
 
   /*
-   viewerを開くことに成功したら
-   launcherを閉じる。
+  既存viewerへの送信。
+  
+  viewerが前面になれば、
+  launcherは不要になる。
+  
+  ただし、focus()がブラウザによって
+  拒否された場合に備えて、
+  今回はlauncherをすぐ閉じない。
   */
-
-  closeLauncher();
-
+  
+  setTimeout(
+    function () {
+    
+      window.close();
+    
+    },
+    500
+  );
 }
 
 
