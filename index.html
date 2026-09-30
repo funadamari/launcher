@@ -105,28 +105,16 @@ body {
    設定
 ========================================================= */
 
-const VIEWER_URL =
-    "https://funadamari.github.io/viewer/";
+const SERVICE_WORKER_URL =
+    "/sw.js";
 
 
-const VIEWER_STORAGE_KEY =
-    "funadamariViewerRequest";
-
-
-const ACTIVE_VIEWER_KEY =
-    "funadamariActiveViewer";
-
-
-const VIEWER_WINDOW_NAME =
-    "funadamariViewer";
-
-
-const REQUEST_VALID_TIME =
-    30 * 1000;
+const SERVICE_WORKER_REQUEST =
+    "funadamariServiceWorkerRequest";
 
 
 /* =========================================================
-   URLパラメータ
+   URL parameters
 ========================================================= */
 
 const params =
@@ -160,163 +148,7 @@ const openButton =
 
 
 /* =========================================================
-   Viewer URL作成
-========================================================= */
-
-function makeViewerURL() {
-
-    const viewerParams =
-        new URLSearchParams();
-
-
-    if (imageURL) {
-
-        viewerParams.set(
-            "image",
-            imageURL
-        );
-
-    }
-
-
-    if (titleText) {
-
-        viewerParams.set(
-            "title",
-            titleText
-        );
-
-    }
-
-
-    return (
-        VIEWER_URL +
-        "?" +
-        viewerParams.toString()
-    );
-
-}
-
-
-/* =========================================================
-   Active viewer情報
-========================================================= */
-
-function getActiveViewerInfo() {
-
-    try {
-
-        const raw =
-            localStorage.getItem(
-                ACTIVE_VIEWER_KEY
-            );
-
-
-        if (!raw) {
-
-            return null;
-
-        }
-
-
-        const info =
-            JSON.parse(raw);
-
-
-        if (
-            !info ||
-            !info.id
-        ) {
-
-            return null;
-
-        }
-
-
-        if (info.timestamp) {
-
-            const age =
-                Date.now() -
-                Number(info.timestamp);
-
-
-            if (
-                age >
-                REQUEST_VALID_TIME
-            ) {
-
-                return null;
-
-            }
-
-        }
-
-
-        return info;
-
-    }
-    catch (error) {
-
-        return null;
-
-    }
-
-}
-
-
-/* =========================================================
-   Viewer request保存
-========================================================= */
-
-function saveViewerRequest(
-    targetViewerId
-) {
-
-    try {
-
-        localStorage.setItem(
-
-            VIEWER_STORAGE_KEY,
-
-            JSON.stringify({
-
-                image:
-                    imageURL,
-
-                title:
-                    titleText,
-
-                timestamp:
-                    Date.now(),
-
-                targetViewerId:
-                    targetViewerId
-
-            })
-
-        );
-
-
-        return true;
-
-    }
-    catch (error) {
-
-        console.error(
-            "viewer request error:",
-            error
-        );
-
-
-        return false;
-
-    }
-
-}
-
-
-/* =========================================================
-   Launcherを閉じる
+   launcherを閉じる
 ========================================================= */
 
 function closeLauncher() {
@@ -343,7 +175,7 @@ function closeLauncher() {
 
 
 /* =========================================================
-   ボタン表示
+   エラー表示
 ========================================================= */
 
 function showOpenButton(
@@ -353,7 +185,6 @@ function showOpenButton(
     messageText.innerHTML =
         message;
 
-
     openButton.style.display =
         "inline-block";
 
@@ -361,10 +192,10 @@ function showOpenButton(
 
 
 /* =========================================================
-   viewerを開く
+   Service Workerへ要求
 ========================================================= */
 
-function openViewer() {
+async function sendToServiceWorker() {
 
     if (!imageURL) {
 
@@ -377,48 +208,15 @@ function openViewer() {
 
 
     /*
-       =====================================================
-       重要
-       =====================================================
-
-       既存viewerがある場合でも、
-       window.open()でabout:blankを作らない。
-
-       ただし今回は「viewerを前面化する」ため、
-       名前付きwindowを取得する必要がある。
-
-       viewer URLを指定してopenすることで、
-       既存の名前付きwindowがあれば
-       それを再利用する。
+       Service Workerが使用可能か確認
     */
 
-    let viewerWindow = null;
-
-
-    try {
-
-        viewerWindow =
-            window.open(
-                makeViewerURL(),
-                VIEWER_WINDOW_NAME
-            );
-
-    }
-    catch (error) {
-
-        console.error(
-            "window.open error:",
-            error
-        );
-
-    }
-
-
-    if (!viewerWindow) {
+    if (
+        !("serviceWorker" in navigator)
+    ) {
 
         showOpenButton(
-            "ビューアを自動的に開けませんでした。<br>" +
-            "下のボタンを押してください。"
+            "このブラウザではビューアを自動的に開けません。"
         );
 
         return;
@@ -426,55 +224,148 @@ function openViewer() {
     }
 
 
-    /*
-       viewerが既に存在する場合は、
-       window.open()によってそのviewerが
-       前面になることを期待する。
-
-       新規viewerの場合も同じ。
-    */
-
     try {
 
-        viewerWindow.focus();
+        /*
+           Service Workerを登録
+        */
+
+        const registration =
+            await navigator.serviceWorker.register(
+                SERVICE_WORKER_URL,
+                {
+                    scope: "/"
+                }
+            );
+
+
+        /*
+           Service Workerが有効になるまで待つ
+        */
+
+        await navigator.serviceWorker.ready;
+
+
+        /*
+           controllerがまだ存在しない場合、
+           active workerを使用する。
+        */
+
+        const worker =
+            navigator.serviceWorker.controller ||
+            registration.active;
+
+
+        if (!worker) {
+
+            /*
+               初回登録直後の場合、
+               次回アクセス時にはcontrollerが
+               設定される。
+
+               ただし今回の処理を続けるため、
+               registration.activeを少し待つ。
+            */
+
+            let activeWorker =
+                registration.active;
+
+
+            const start =
+                Date.now();
+
+
+            while (
+                !activeWorker &&
+                Date.now() - start < 3000
+            ) {
+
+                await new Promise(
+                    function (resolve) {
+
+                        setTimeout(
+                            resolve,
+                            100
+                        );
+
+                    }
+                );
+
+
+                activeWorker =
+                    registration.active;
+
+            }
+
+
+            if (!activeWorker) {
+
+                showOpenButton(
+                    "ビューアを開けませんでした。<br>" +
+                    "下のボタンを押してください。"
+                );
+
+                return;
+
+            }
+
+
+            activeWorker.postMessage({
+
+                type:
+                    SERVICE_WORKER_REQUEST,
+
+                image:
+                    imageURL,
+
+                title:
+                    titleText
+
+            });
+
+        }
+        else {
+
+            worker.postMessage({
+
+                type:
+                    SERVICE_WORKER_REQUEST,
+
+                image:
+                    imageURL,
+
+                title:
+                    titleText
+
+            });
+
+        }
+
+
+        /*
+           Service Workerへの送信完了。
+
+           viewerが既にあればfocusされ、
+           なければ新規viewerが開く。
+        */
+
+        closeLauncher();
 
     }
     catch (error) {
 
-        console.warn(
-            "viewer focus failed:",
+        console.error(
+            "Service Worker error:",
             error
         );
 
-    }
 
-
-    /*
-       念のためactive viewer情報があれば、
-       画像変更要求も送る。
-
-       viewerが新規読み込みの場合はURLから
-       直接画像を表示するため不要だが、
-       既存viewerの再利用時には補助になる。
-    */
-
-    const activeInfo =
-        getActiveViewerInfo();
-
-
-    if (
-        activeInfo &&
-        activeInfo.id
-    ) {
-
-        saveViewerRequest(
-            activeInfo.id
+        showOpenButton(
+            "ビューアを自動的に開けませんでした。<br>" +
+            "下のボタンを押してください。"
         );
 
     }
-
-
-    closeLauncher();
 
 }
 
@@ -487,7 +378,16 @@ openButton.addEventListener(
     "click",
     function () {
 
-        openViewer();
+        /*
+           このクリックが
+           WindowClient.focus()に必要な
+           transient activationになる。
+
+           したがって余計なsetTimeoutなどを
+           ここに入れない。
+        */
+
+        sendToServiceWorker();
 
     }
 );
@@ -505,10 +405,45 @@ if (!imageURL) {
 }
 else {
 
-    openViewer();
+    /*
+       自動実行。
+
+       Google Sitesからlauncherが開かれた
+       だけの場合、ここではfocusできない
+       可能性がある。
+
+       その場合はボタンを表示する。
+    */
+
+    if (
+        "serviceWorker" in navigator
+    ) {
+
+        /*
+           自動実行ではpopup/focusが
+           ブロックされる可能性があるため、
+           一旦ボタン方式にする。
+
+           初回画像ではこれまでと同じく
+           「ビューアを開く」が表示される。
+        */
+
+        showOpenButton(
+            "ビューアを開いています。<br>" +
+            "下のボタンを押してください。"
+        );
+
+    }
+    else {
+
+        showOpenButton(
+            "ビューアを自動的に開けませんでした。<br>" +
+            "下のボタンを押してください。"
+        );
+
+    }
 
 }
-
 
 </script>
 
