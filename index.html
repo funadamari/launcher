@@ -1,77 +1,74 @@
 <!DOCTYPE html>
+
 <html lang="ja">
 
 <head>
 
 <meta charset="UTF-8">
 
-<meta name="viewport"
-      content="width=device-width,
-               initial-scale=1.0">
+<meta
+  name="viewport"
+  content="width=device-width, initial-scale=1.0">
 
 <title>画像ビューアを開いています</title>
-
 
 <style>
 
 html,
 body {
 
-    margin: 0;
-    padding: 0;
+  margin: 0;
+  padding: 0;
 
-    width: 100%;
-    height: 100%;
+  width: 100%;
+  height: 100%;
 
-    background: #000;
+  background: #000;
+  color: #fff;
 
-    color: #fff;
-
-    font-family: sans-serif;
+  font-family: sans-serif;
 
 }
-
 
 #message {
 
-    position: absolute;
+  position: absolute;
 
-    left: 50%;
-    top: 50%;
+  left: 50%;
+  top: 50%;
 
-    transform:
-        translate(-50%, -50%);
+  transform:
+    translate(-50%, -50%);
 
-    width: 90%;
+  width: 90%;
 
-    max-width: 500px;
+  max-width: 500px;
 
-    text-align: center;
+  text-align: center;
 
-    line-height: 1.7;
+  line-height: 1.7;
 
 }
 
-
 #openButton {
 
-    display: none;
+  display: none;
 
-    margin-top: 20px;
+  margin-top: 20px;
 
-    padding: 12px 24px;
+  padding: 12px 24px;
 
-    border: none;
+  border: none;
 
-    border-radius: 6px;
+  border-radius: 6px;
 
-    background: #fff;
+  background: #fff;
 
-    color: #111;
+  color: #111;
 
-    font-size: 16px;
+  font-size: 16px;
 
-    cursor: pointer;
+  cursor: pointer;
 
 }
 
@@ -85,363 +82,464 @@ body {
 
 <div id="message">
 
-    <div id="messageText">
-        画像ビューアを開いています…
-    </div>
+  <div id="messageText">
+    画像ビューアを開いています…
+  </div>
 
-    <button
-        id="openButton"
-        type="button">
-        ビューアを開く
-    </button>
+  <button
+    id="openButton"
+    type="button">
+
+    ビューアを開く
+
+  </button>
 
 </div>
 
 
 <script>
 
-
 /* =========================================================
    設定
-========================================================= */
+   ========================================================= */
 
 const SERVICE_WORKER_URL =
-    "/sw.js";
-
+  "/sw.js";
 
 const SERVICE_WORKER_REQUEST =
-    "funadamariServiceWorkerRequest";
+  "funadamariServiceWorkerRequest";
+
+
+const ACTIVE_VIEWER_KEY =
+  "funadamariActiveViewer";
+
+
+const VIEWER_URL =
+  "/viewer/";
+
+
+const VIEWER_WINDOW_NAME =
+  "funadamariViewer";
 
 
 /* =========================================================
-   URL parameters
-========================================================= */
+   URLパラメータ
+   ========================================================= */
 
 const params =
-    new URLSearchParams(
-        window.location.search
-    );
+  new URLSearchParams(
+    window.location.search
+  );
 
 
 const imageURL =
-    params.get("image") || "";
+  params.get("image") || "";
 
 
 const titleText =
-    params.get("title") || "";
+  params.get("title") || "";
 
 
 /* =========================================================
    HTML
-========================================================= */
+   ========================================================= */
 
 const messageText =
-    document.getElementById(
-        "messageText"
-    );
+  document.getElementById(
+    "messageText"
+  );
 
 
 const openButton =
-    document.getElementById(
-        "openButton"
-    );
+  document.getElementById(
+    "openButton"
+  );
 
 
 /* =========================================================
    launcherを閉じる
-========================================================= */
+   ========================================================= */
 
 function closeLauncher() {
 
-    setTimeout(
-        function () {
+  setTimeout(function () {
 
-            try {
+    try {
 
-                window.close();
+      window.close();
 
-            }
-            catch (error) {
+    }
+    catch (error) {
 
-                // ignore
+      // ignore
 
-            }
+    }
 
-        },
-        100
-    );
+  }, 100);
 
 }
 
 
 /* =========================================================
-   エラー表示
-========================================================= */
+   「ビューアを開く」ボタンを表示
+   ========================================================= */
 
-function showOpenButton(
-    message
-) {
+function showOpenButton(message) {
 
-    messageText.innerHTML =
-        message;
+  messageText.innerHTML =
+    message;
 
-    openButton.style.display =
-        "inline-block";
+  openButton.style.display =
+    "inline-block";
 
 }
 
 
 /* =========================================================
-   Service Workerへ要求
-========================================================= */
+   Active Viewerが存在するか確認
+   ========================================================= */
 
-async function sendToServiceWorker() {
+function hasActiveViewer() {
 
-    if (!imageURL) {
+  try {
 
-        messageText.textContent =
-            "画像URLが指定されていません。";
+    const raw =
+      localStorage.getItem(
+        ACTIVE_VIEWER_KEY
+      );
 
-        return;
+
+    if (!raw) {
+
+      return false;
+
+    }
+
+
+    const data =
+      JSON.parse(raw);
+
+
+    if (!data || !data.id) {
+
+      return false;
 
     }
 
 
     /*
-       Service Workerが使用可能か確認
+     古い情報が残っている場合に備えて
+     30秒以上古い登録は無効とする。
     */
 
     if (
-        !("serviceWorker" in navigator)
+      typeof data.timestamp === "number" &&
+      Date.now() - data.timestamp > 30000
     ) {
 
-        showOpenButton(
-            "このブラウザではビューアを自動的に開けません。"
-        );
-
-        return;
+      return false;
 
     }
 
 
-    try {
+    return true;
 
-        /*
-           Service Workerを登録
-        */
+  }
+  catch (error) {
 
-        const registration =
-            await navigator.serviceWorker.register(
-                SERVICE_WORKER_URL,
-                {
-                    scope: "/"
-                }
-            );
+    console.warn(
+      "active viewer check failed:",
+      error
+    );
 
+    return false;
 
-        /*
-           Service Workerが有効になるまで待つ
-        */
+  }
 
-        await navigator.serviceWorker.ready;
+}
 
 
-        /*
-           controllerがまだ存在しない場合、
-           active workerを使用する。
-        */
+/* =========================================================
+   Viewer URLを作成
+   ========================================================= */
 
-        const worker =
-            navigator.serviceWorker.controller ||
-            registration.active;
+function createViewerURL() {
 
-
-        if (!worker) {
-
-            /*
-               初回登録直後の場合、
-               次回アクセス時にはcontrollerが
-               設定される。
-
-               ただし今回の処理を続けるため、
-               registration.activeを少し待つ。
-            */
-
-            let activeWorker =
-                registration.active;
+  const viewerURL =
+    new URL(
+      VIEWER_URL,
+      window.location.origin
+    );
 
 
-            const start =
-                Date.now();
+  if (imageURL) {
+
+    viewerURL.searchParams.set(
+      "image",
+      imageURL
+    );
+
+  }
 
 
-            while (
-                !activeWorker &&
-                Date.now() - start < 3000
-            ) {
+  if (titleText) {
 
-                await new Promise(
-                    function (resolve) {
+    viewerURL.searchParams.set(
+      "title",
+      titleText
+    );
 
-                        setTimeout(
-                            resolve,
-                            100
-                        );
-
-                    }
-                );
+  }
 
 
-                activeWorker =
-                    registration.active;
+  return viewerURL.href;
 
-            }
-
-
-            if (!activeWorker) {
-
-                showOpenButton(
-                    "ビューアを開けませんでした。<br>" +
-                    "下のボタンを押してください。"
-                );
-
-                return;
-
-            }
+}
 
 
-            activeWorker.postMessage({
+/* =========================================================
+   初回：
+   直接window.open()でviewerを開く
+   ========================================================= */
 
-                type:
-                    SERVICE_WORKER_REQUEST,
+function openNewViewer() {
 
-                image:
-                    imageURL,
+  if (!imageURL) {
 
-                title:
-                    titleText
+    messageText.textContent =
+      "画像URLが指定されていません。";
 
-            });
+    return;
 
+  }
+
+
+  const url =
+    createViewerURL();
+
+
+  /*
+   ここが非常に重要。
+
+   このwindow.open()は
+   ボタンのclickイベントから直接呼ぶ。
+
+   setTimeout()やawaitを
+   この前に入れない。
+  */
+
+  const viewerWindow =
+    window.open(
+      url,
+      VIEWER_WINDOW_NAME
+    );
+
+
+  if (!viewerWindow) {
+
+    messageText.innerHTML =
+      "ビューアを開けませんでした。<br>" +
+      "ブラウザのポップアップブロックを確認してください。";
+
+    openButton.style.display =
+      "inline-block";
+
+    return;
+
+  }
+
+
+  /*
+   viewerを開くことに成功したら
+   launcherを閉じる。
+  */
+
+  closeLauncher();
+
+}
+
+
+/* =========================================================
+   既存viewerへService Worker経由で送る
+   ========================================================= */
+
+async function sendToExistingViewer() {
+
+  if (!imageURL) {
+
+    messageText.textContent =
+      "画像URLが指定されていません。";
+
+    return;
+
+  }
+
+
+  if (
+    !("serviceWorker" in navigator)
+  ) {
+
+    /*
+     Service Workerが使えない場合は
+     既存viewerを直接操作できない。
+
+     そのためボタン方式に戻す。
+    */
+
+    showOpenButton(
+      "ビューアを操作できませんでした。"
+    );
+
+    return;
+
+  }
+
+
+  try {
+
+    /*
+     Service Workerを登録
+    */
+
+    const registration =
+      await navigator.serviceWorker.register(
+        SERVICE_WORKER_URL,
+        {
+          scope: "/"
         }
-        else {
-
-            worker.postMessage({
-
-                type:
-                    SERVICE_WORKER_REQUEST,
-
-                image:
-                    imageURL,
-
-                title:
-                    titleText
-
-            });
-
-        }
+      );
 
 
-        /*
-           Service Workerへの送信完了。
+    /*
+     Service Workerがactiveになるまで待つ
+    */
 
-           viewerが既にあればfocusされ、
-           なければ新規viewerが開く。
-        */
+    await navigator.serviceWorker.ready;
 
-        closeLauncher();
+
+    const worker =
+      navigator.serviceWorker.controller ||
+      registration.active;
+
+
+    if (!worker) {
+
+      showOpenButton(
+        "ビューアを操作できませんでした。"
+      );
+
+      return;
 
     }
-    catch (error) {
-
-        console.error(
-            "Service Worker error:",
-            error
-        );
 
 
-        showOpenButton(
-            "ビューアを自動的に開けませんでした。<br>" +
-            "下のボタンを押してください。"
-        );
+    /*
+     既存viewerへ要求
+    */
 
-    }
+    worker.postMessage({
+
+      type:
+        SERVICE_WORKER_REQUEST,
+
+      image:
+        imageURL,
+
+      title:
+        titleText
+
+    });
+
+
+    /*
+     launcherは不要なので閉じる
+    */
+
+    closeLauncher();
+
+  }
+  catch (error) {
+
+    console.error(
+      "Service Worker error:",
+      error
+    );
+
+
+    showOpenButton(
+      "ビューアを操作できませんでした。<br>" +
+      "もう一度お試しください。"
+    );
+
+  }
 
 }
 
 
 /* =========================================================
    ボタン
-========================================================= */
+   ========================================================= */
 
 openButton.addEventListener(
-    "click",
-    function () {
+  "click",
+  function () {
 
-        /*
-           このクリックが
-           WindowClient.focus()に必要な
-           transient activationになる。
+    /*
+     ボタンから直接window.open()する。
 
-           したがって余計なsetTimeoutなどを
-           ここに入れない。
-        */
+     ここにはawaitやsetTimeoutを入れない。
+    */
 
-        sendToServiceWorker();
+    openNewViewer();
 
-    }
+  }
 );
 
 
 /* =========================================================
    初期処理
-========================================================= */
+   ========================================================= */
 
 if (!imageURL) {
 
-    messageText.textContent =
-        "画像URLが指定されていません。";
+  messageText.textContent =
+    "画像URLが指定されていません。";
 
 }
 else {
 
+  /*
+   まず既存viewerがあるか確認する。
+  */
+
+  if (hasActiveViewer()) {
+
     /*
-       自動実行。
-
-       Google Sitesからlauncherが開かれた
-       だけの場合、ここではfocusできない
-       可能性がある。
-
-       その場合はボタンを表示する。
+     既存viewerがある場合は、
+     Service Workerから画像を変更する。
     */
 
-    if (
-        "serviceWorker" in navigator
-    ) {
+    messageText.textContent =
+      "既存のビューアを更新しています…";
 
-        /*
-           自動実行ではpopup/focusが
-           ブロックされる可能性があるため、
-           一旦ボタン方式にする。
 
-           初回画像ではこれまでと同じく
-           「ビューアを開く」が表示される。
-        */
+    sendToExistingViewer();
 
-        showOpenButton(
-            "ビューアを開いています。<br>" +
-            "下のボタンを押してください。"
-        );
+  }
+  else {
 
-    }
-    else {
+    /*
+     viewerがまだない。
 
-        showOpenButton(
-            "ビューアを自動的に開けませんでした。<br>" +
-            "下のボタンを押してください。"
-        );
+     初回なのでボタンを表示する。
+    */
 
-    }
+    showOpenButton(
+      "画像ビューアを開きます。<br>" +
+      "下のボタンを押してください。"
+    );
+
+  }
 
 }
 
